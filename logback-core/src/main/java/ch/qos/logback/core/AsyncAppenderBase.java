@@ -1,36 +1,16 @@
-/**
- * Logback: the reliable, generic, fast and flexible logging framework.
- * Copyright (C) 1999-2015, QOS.ch. All rights reserved.
- *
- * This program and the accompanying materials are dual-licensed under
- * either the terms of the Eclipse Public License v1.0 as published by
- * the Eclipse Foundation
- *
- *   or (per the licensee's choosing)
- *
- * under the terms of the GNU Lesser General Public License version 2.1
- * as published by the Free Software Foundation.
- */
 package ch.qos.logback.core;
 
 import ch.qos.logback.core.spi.AppenderAttachable;
 import ch.qos.logback.core.spi.AppenderAttachableImpl;
 import ch.qos.logback.core.util.InterruptUtil;
+import javafx.concurrent.Worker;
 
 import java.util.Iterator;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 
 /**
- * This appender and derived classes, log events asynchronously.  In order to avoid loss of logging events, this
- * appender should be closed. It is the user's  responsibility to close appenders, typically at the end of the
- * application lifecycle.
- * <p/>
- * This appender buffers events in a {@link BlockingQueue}. {@link Worker} thread created by this appender takes
- * events from the head of the queue, and dispatches them to the single appender attached to this appender.
- * <p/>
- * <p>Please refer to the <a href="http://logback.qos.ch/manual/appenders.html#AsyncAppender">logback manual</a> for
- * further information about this appender.</p>
+ * 异步追加器基类
  *
  * @param <E>
  * @author Ceki G&uuml;lc&uuml;
@@ -39,53 +19,16 @@ import java.util.concurrent.BlockingQueue;
  */
 public class AsyncAppenderBase<E> extends UnsynchronizedAppenderBase<E> implements AppenderAttachable<E> {
 
+    /** 被代理的追加器、阻塞队列、默认阻塞队列大小、阻塞队列大小、丢弃日志事件的阈值（默认为 queueSize / 5，剩余容量小于该值则丢弃）、是否阻塞、后台工作线程 */
     AppenderAttachableImpl<E> aai = new AppenderAttachableImpl<E>();
     BlockingQueue<E> blockingQueue;
-
-    /**
-     * The default buffer size.
-     */
     public static final int DEFAULT_QUEUE_SIZE = 256;
     int queueSize = DEFAULT_QUEUE_SIZE;
-
     int appenderCount = 0;
-
     static final int UNDEFINED = -1;
     int discardingThreshold = UNDEFINED;
     boolean neverBlock = false;
-
     Worker worker = new Worker();
-
-    /**
-     * The default maximum queue flush time allowed during appender stop. If the 
-     * worker takes longer than this time it will exit, discarding any remaining 
-     * items in the queue
-     */
-    public static final int DEFAULT_MAX_FLUSH_TIME = 1000;
-    int maxFlushTime = DEFAULT_MAX_FLUSH_TIME;
-
-    /**
-     * Is the eventObject passed as parameter discardable? The base class's implementation of this method always returns
-     * 'false' but sub-classes may (and do) override this method.
-     * <p/>
-     * <p>Note that only if the buffer is nearly full are events discarded. Otherwise, when the buffer is "not full"
-     * all events are logged.
-     *
-     * @param eventObject
-     * @return - true if the event can be discarded, false otherwise
-     */
-    protected boolean isDiscardable(E eventObject) {
-        return false;
-    }
-
-    /**
-     * Pre-process the event prior to queueing. The base class does no pre-processing but sub-classes can
-     * override this behavior.
-     *
-     * @param eventObject
-     */
-    protected void preprocess(E eventObject) {
-    }
 
     @Override
     public void start() {
@@ -99,17 +42,97 @@ public class AsyncAppenderBase<E> extends UnsynchronizedAppenderBase<E> implemen
             addError("Invalid queue size [" + queueSize + "]");
             return;
         }
+        // 初始化阻塞队列
         blockingQueue = new ArrayBlockingQueue<E>(queueSize);
-
         if (discardingThreshold == UNDEFINED)
             discardingThreshold = queueSize / 5;
         addInfo("Setting discardingThreshold to " + discardingThreshold);
+        // 设置后台工作线程，并启动
         worker.setDaemon(true);
         worker.setName("AsyncAppender-Worker-" + getName());
         // make sure this instance is marked as "started" before staring the worker Thread
         super.start();
         worker.start();
     }
+
+    /**
+     * 后台工作线程：AsyncAppender-Worker-XXX，负责从阻塞队列中获取日志事件，写入真实的被代理追加器中，例如文件追加器等
+     */
+    class Worker extends Thread {
+
+        @Override
+        public void run() {
+            AsyncAppenderBase<E> parent = AsyncAppenderBase.this;
+            AppenderAttachableImpl<E> aai = parent.aai;
+            // loop while the parent is started
+            while (parent.isStarted()) {
+                try {
+                    E e = parent.blockingQueue.take();
+                    aai.appendLoopOnAppenders(e);
+                } catch (InterruptedException ie) {
+                    break;
+                }
+            }
+            addInfo("Worker thread will flush remaining events before exiting. ");
+            for (E e : parent.blockingQueue) {
+                aai.appendLoopOnAppenders(e);
+                parent.blockingQueue.remove(e);
+            }
+            aai.detachAndStopAllAppenders();
+        }
+    }
+
+    /**
+     * 追加日志事件：若队列大小已经达到阈值或日志级别不够，则直接返回，否则添加该事件到队列中
+     */
+    @Override
+    protected void append(E eventObject) {
+        if (isQueueBelowDiscardingThreshold() && isDiscardable(eventObject)) {
+            return;
+        }
+        preprocess(eventObject);
+        put(eventObject);
+    }
+    private boolean isQueueBelowDiscardingThreshold() {
+        return (blockingQueue.remainingCapacity() < discardingThreshold);
+    }
+    protected boolean isDiscardable(E eventObject) {
+        return false;
+    }
+    protected void preprocess(E eventObject) {
+    }
+    private void put(E eventObject) {
+        if (neverBlock) {
+            blockingQueue.offer(eventObject);
+        } else {
+            putUninterruptibly(eventObject);
+        }
+    }
+    private void putUninterruptibly(E eventObject) {
+        boolean interrupted = false;
+        try {
+            while (true) {
+                try {
+                    blockingQueue.put(eventObject);
+                    break;
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                }
+            }
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    /**
+     * The default maximum queue flush time allowed during appender stop. If the
+     * worker takes longer than this time it will exit, discarding any remaining
+     * items in the queue
+     */
+    public static final int DEFAULT_MAX_FLUSH_TIME = 1000;
+    int maxFlushTime = DEFAULT_MAX_FLUSH_TIME;
 
     @Override
     public void stop() {
@@ -135,7 +158,7 @@ public class AsyncAppenderBase<E> extends UnsynchronizedAppenderBase<E> implemen
             // check to see if the thread ended and if not add a warning message
             if (worker.isAlive()) {
                 addWarn("Max queue flush timeout (" + maxFlushTime + " ms) exceeded. Approximately " + blockingQueue.size()
-                                + " queued events were possibly discarded.");
+                        + " queued events were possibly discarded.");
             } else {
                 addInfo("Queue flush finished successfully within timeout.");
             }
@@ -145,49 +168,6 @@ public class AsyncAppenderBase<E> extends UnsynchronizedAppenderBase<E> implemen
             addError("Failed to join worker thread. " + remaining + " queued events may be discarded.", e);
         } finally {
             interruptUtil.unmaskInterruptFlag();
-        }
-    }
-
-
-
-
-
-    @Override
-    protected void append(E eventObject) {
-        if (isQueueBelowDiscardingThreshold() && isDiscardable(eventObject)) {
-            return;
-        }
-        preprocess(eventObject);
-        put(eventObject);
-    }
-
-    private boolean isQueueBelowDiscardingThreshold() {
-        return (blockingQueue.remainingCapacity() < discardingThreshold);
-    }
-
-    private void put(E eventObject) {
-        if (neverBlock) {
-            blockingQueue.offer(eventObject);
-        } else {
-            putUninterruptibly(eventObject);
-        }
-    }
-
-    private void putUninterruptibly(E eventObject) {
-        boolean interrupted = false;
-        try {
-            while (true) {
-                try {
-                    blockingQueue.put(eventObject);
-                    break;
-                } catch (InterruptedException e) {
-                    interrupted = true;
-                }
-            }
-        } finally {
-            if (interrupted) {
-                Thread.currentThread().interrupt();
-            }
         }
     }
 
@@ -242,6 +222,7 @@ public class AsyncAppenderBase<E> extends UnsynchronizedAppenderBase<E> implemen
         return blockingQueue.remainingCapacity();
     }
 
+    @Override
     public void addAppender(Appender<E> newAppender) {
         if (appenderCount == 0) {
             appenderCount++;
@@ -277,30 +258,4 @@ public class AsyncAppenderBase<E> extends UnsynchronizedAppenderBase<E> implemen
         return aai.detachAppender(name);
     }
 
-    class Worker extends Thread {
-
-        public void run() {
-            AsyncAppenderBase<E> parent = AsyncAppenderBase.this;
-            AppenderAttachableImpl<E> aai = parent.aai;
-
-            // loop while the parent is started
-            while (parent.isStarted()) {
-                try {
-                    E e = parent.blockingQueue.take();
-                    aai.appendLoopOnAppenders(e);
-                } catch (InterruptedException ie) {
-                    break;
-                }
-            }
-
-            addInfo("Worker thread will flush remaining events before exiting. ");
-
-            for (E e : parent.blockingQueue) {
-                aai.appendLoopOnAppenders(e);
-                parent.blockingQueue.remove(e);
-            }
-
-            aai.detachAndStopAllAppenders();
-        }
-    }
 }

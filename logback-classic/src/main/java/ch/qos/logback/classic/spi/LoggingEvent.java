@@ -1,16 +1,3 @@
-/**
- * Logback: the reliable, generic, fast and flexible logging framework.
- * Copyright (C) 1999-2015, QOS.ch. All rights reserved.
- *
- * This program and the accompanying materials are dual-licensed under
- * either the terms of the Eclipse Public License v1.0 as published by
- * the Eclipse Foundation
- *
- *   or (per the licensee's choosing)
- *
- * under the terms of the GNU Lesser General Public License version 2.1
- * as published by the Free Software Foundation.
- */
 package ch.qos.logback.classic.spi;
 
 import java.io.IOException;
@@ -30,17 +17,7 @@ import ch.qos.logback.classic.util.LogbackMDCAdapter;
 import org.slf4j.spi.MDCAdapter;
 
 /**
- * The internal representation of logging events. When an affirmative decision
- * is made to log then a <code>LoggingEvent</code> instance is created. This
- * instance is passed around to the different logback-classic components.
- * <p/>
- * <p>
- * Writers of logback-classic components such as appenders should be aware of
- * that some of the LoggingEvent fields are initialized lazily. Therefore, an
- * appender wishing to output data to be later correctly read by a receiver,
- * must initialize "lazy" fields prior to writing them out. See the
- * {@link #prepareForDeferredProcessing()} method for the exact list.
- * </p>
+ * 日志事件
  *
  * @author Ceki G&uuml;lc&uuml;
  * @author S&eacute;bastien Pennec

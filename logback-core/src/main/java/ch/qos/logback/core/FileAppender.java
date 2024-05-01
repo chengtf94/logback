@@ -1,16 +1,3 @@
-/**
- * Logback: the reliable, generic, fast and flexible logging framework.
- * Copyright (C) 1999-2015, QOS.ch. All rights reserved.
- *
- * This program and the accompanying materials are dual-licensed under
- * either the terms of the Eclipse Public License v1.0 as published by
- * the Eclipse Foundation
- *
- *   or (per the licensee's choosing)
- *
- * under the terms of the GNU Lesser General Public License version 2.1
- * as published by the Free Software Foundation.
- */
 package ch.qos.logback.core;
 
 import static ch.qos.logback.core.CoreConstants.CODES_URL;
@@ -29,101 +16,38 @@ import ch.qos.logback.core.util.FileSize;
 import ch.qos.logback.core.util.FileUtil;
 
 /**
- * FileAppender appends log events to a file.
- * 
- * For more information about this appender, please refer to the online manual
- * at http://logback.qos.ch/manual/appenders.html#FileAppender
+ * 文件追加器
  * 
  * @author Ceki G&uuml;lc&uuml;
  */
 public class FileAppender<E> extends OutputStreamAppender<E> {
 
-    public static final long DEFAULT_BUFFER_SIZE = 8192;
-
+    /** 文件名称、默认缓冲区大小 */
     static protected String COLLISION_WITH_EARLIER_APPENDER_URL = CODES_URL + "#earlier_fa_collision";
-
-    /**
-     * Append to or truncate the file? The default value for this variable is
-     * <code>true</code>, meaning that by default a <code>FileAppender</code> will
-     * append to an existing file and not truncate it.
-     */
     protected boolean append = true;
-
-    /**
-     * The name of the active log file.
-     */
     protected String fileName = null;
-
     private boolean prudent = false;
-
+    public static final long DEFAULT_BUFFER_SIZE = 8192;
     private FileSize bufferSize = new FileSize(DEFAULT_BUFFER_SIZE);
 
-    /**
-     * The <b>File</b> property takes a string value which should be the name of
-     * the file to append to.
-     */
-    public void setFile(String file) {
-        if (file == null) {
-            fileName = file;
-        } else {
-            // Trim spaces from both ends. The users probably does not want
-            // trailing spaces in file names.
-            fileName = file.trim();
-        }
-    }
-
-    /**
-     * Returns the value of the <b>Append</b> property.
-     */
-    public boolean isAppend() {
-        return append;
-    }
-
-    /**
-     * This method is used by derived classes to obtain the raw file property.
-     * Regular users should not be calling this method.
-     * 
-     * @return the value of the file property
-     */
-    final public String rawFileProperty() {
-        return fileName;
-    }
-
-    /**
-     * Returns the value of the <b>File</b> property.
-     * 
-     * <p>
-     * This method may be overridden by derived classes.
-     * 
-     */
-    public String getFile() {
-        return fileName;
-    }
-
-    /**
-     * If the value of <b>File</b> is not <code>null</code>, then
-     * {@link #openFile} is called with the values of <b>File</b> and
-     * <b>Append</b> properties.
-     */
+    @Override
     public void start() {
         int errors = 0;
         if (getFile() != null) {
             addInfo("File property is set to [" + fileName + "]");
-
             if (prudent) {
                 if (!isAppend()) {
                     setAppend(true);
                     addWarn("Setting \"Append\" property to true on account of \"Prudent\" mode");
                 }
             }
-
             if (checkForFileCollisionInPreviousFileAppenders()) {
                 addError("Collisions detected with FileAppender/RollingAppender instances defined earlier. Aborting.");
                 addError(MORE_INFO_PREFIX + COLLISION_WITH_EARLIER_APPENDER_URL);
                 errors++;
             } else {
-                // file should be opened only if collision free
                 try {
+                    // 打开文件
                     openFile(getFile());
                 } catch (java.io.IOException e) {
                     errors++;
@@ -137,6 +61,44 @@ public class FileAppender<E> extends OutputStreamAppender<E> {
         if (errors == 0) {
             super.start();
         }
+    }
+    /**
+     * 打开文件
+     */
+    public void openFile(String file_name) throws IOException {
+        lock.lock();
+        try {
+            File file = new File(file_name);
+            boolean result = FileUtil.createMissingParentDirectories(file);
+            if (!result) {
+                addError("Failed to create parent directories for [" + file.getAbsolutePath() + "]");
+            }
+
+            ResilientFileOutputStream resilientFos = new ResilientFileOutputStream(file, append, bufferSize.getSize());
+            resilientFos.setContext(context);
+            setOutputStream(resilientFos);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+
+    public void setFile(String file) {
+        if (file == null) {
+            fileName = file;
+        } else {
+            fileName = file.trim();
+        }
+    }
+
+    public boolean isAppend() {
+        return append;
+    }
+    final public String rawFileProperty() {
+        return fileName;
+    }
+    public String getFile() {
+        return fileName;
     }
 
     @Override
@@ -176,38 +138,7 @@ public class FileAppender<E> extends OutputStreamAppender<E> {
         addError("'" + optionName + "' option has the same value \"" + optionValue + "\" as that given for appender [" + appenderName + "] defined earlier.");
     }
 
-    /**
-     * <p>
-     * Sets and <i>opens</i> the file where the log output will go. The specified
-     * file must be writable.
-     * 
-     * <p>
-     * If there was already an opened file, then the previous file is closed
-     * first.
-     * 
-     * <p>
-     * <b>Do not use this method directly. To configure a FileAppender or one of
-     * its subclasses, set its properties one by one and then call start().</b>
-     * 
-     * @param file_name
-     *          The path to the log file.
-     */
-    public void openFile(String file_name) throws IOException {
-        lock.lock();
-        try {
-            File file = new File(file_name);
-            boolean result = FileUtil.createMissingParentDirectories(file);
-            if (!result) {
-                addError("Failed to create parent directories for [" + file.getAbsolutePath() + "]");
-            }
 
-            ResilientFileOutputStream resilientFos = new ResilientFileOutputStream(file, append, bufferSize.getSize());
-            resilientFos.setContext(context);
-            setOutputStream(resilientFos);
-        } finally {
-            lock.unlock();
-        }
-    }
 
     /**
      * @see #setPrudent(boolean)

@@ -1,16 +1,3 @@
-/**
- * Logback: the reliable, generic, fast and flexible logging framework.
- * Copyright (C) 1999-2015, QOS.ch. All rights reserved.
- *
- * This program and the accompanying materials are dual-licensed under
- * either the terms of the Eclipse Public License v1.0 as published by
- * the Eclipse Foundation
- *
- *   or (per the licensee's choosing)
- *
- * under the terms of the GNU Lesser General Public License version 2.1
- * as published by the Free Software Foundation.
- */
 package ch.qos.logback.classic;
 
 import static ch.qos.logback.core.CoreConstants.EVALUATOR_MAP;
@@ -42,11 +29,7 @@ import ch.qos.logback.core.status.StatusManager;
 import ch.qos.logback.core.status.WarnStatus;
 
 /**
- * LoggerContext glues many of the logback-classic components together. In
- * principle, every logback-classic component instance is attached either
- * directly or indirectly to a LoggerContext instance. Just as importantly
- * LoggerContext implements the {@link ILoggerFactory} acting as the
- * manufacturing source of {@link Logger} instances.
+ * 日志上下文
  *
  * @author Ceki Gulcu
  */
@@ -108,34 +91,26 @@ public class LoggerContext extends ContextBase implements ILoggerFactory, LifeCy
         updateLoggerContextVO();
     }
 
+    /**
+     * 获取Logger
+     */
     public final Logger getLogger(final Class<?> clazz) {
         return getLogger(clazz.getName());
     }
-
     @Override
     public final Logger getLogger(final String name) {
-
         if (name == null) {
             throw new IllegalArgumentException("name argument cannot be null");
         }
-
-        // if we are asking for the root logger, then let us return it without
-        // wasting time
         if (Logger.ROOT_LOGGER_NAME.equalsIgnoreCase(name)) {
             return root;
         }
-
         int i = 0;
         Logger logger = root;
-
-        // check if the desired logger exists, if it does, return it
-        // without further ado.
         Logger childLogger = (Logger) loggerCache.get(name);
-        // if we have the child, then let us return it without wasting time
         if (childLogger != null) {
             return childLogger;
         }
-
         // if the desired logger does not exist, them create all the loggers
         // in between as well (if they don't already exist)
         String childName;

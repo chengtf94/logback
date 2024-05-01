@@ -1,16 +1,3 @@
-/**
- * Logback: the reliable, generic, fast and flexible logging framework.
- * Copyright (C) 1999-2015, QOS.ch. All rights reserved.
- *
- * This program and the accompanying materials are dual-licensed under
- * either the terms of the Eclipse Public License v1.0 as published by
- * the Eclipse Foundation
- *
- *   or (per the licensee's choosing)
- *
- * under the terms of the GNU Lesser General Public License version 2.1
- * as published by the Free Software Foundation.
- */
 package ch.qos.logback.core.spi;
 
 import java.util.Iterator;
@@ -19,8 +6,7 @@ import ch.qos.logback.core.Appender;
 import ch.qos.logback.core.util.COWArrayList;
 
 /**
- * A ReentrantReadWriteLock based implementation of the
- * {@link AppenderAttachable} interface.
+ * AppenderAttachable实现
  *
  * @author Ceki G&uuml;lc&uuml;
  */
@@ -29,10 +15,7 @@ public class AppenderAttachableImpl<E> implements AppenderAttachable<E> {
     @SuppressWarnings("unchecked")
     final private COWArrayList<Appender<E>> appenderList = new COWArrayList<Appender<E>>(new Appender[0]);
 
-    /**
-     * Attach an appender. If the appender is already in the list in won't be
-     * added again.
-     */
+   @Override
     public void addAppender(Appender<E> newAppender) {
         if (newAppender == null) {
             throw new IllegalArgumentException("Null argument disallowed");

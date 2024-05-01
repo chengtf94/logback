@@ -55,32 +55,24 @@ abstract public class AppenderBase<E> extends ContextAwareBase implements Append
 
     static final int ALLOWED_REPEATS = 5;
 
+    @Override
     public synchronized void doAppend(E eventObject) {
-        // WARNING: The guard check MUST be the first statement in the
-        // doAppend() method.
-
-        // prevent re-entry.
         if (guard) {
             return;
         }
-
         try {
             guard = true;
-
             if (!this.started) {
                 if (statusRepeatCount++ < ALLOWED_REPEATS) {
                     addStatus(new WarnStatus("Attempted to append to non started appender [" + name + "].", this));
                 }
                 return;
             }
-
             if (getFilterChainDecision(eventObject) == FilterReply.DENY) {
                 return;
             }
-
             // ok, we now invoke derived class' implementation of append
             this.append(eventObject);
-
         } catch (Exception e) {
             if (exceptionCount++ < ALLOWED_REPEATS) {
                 addError("Appender [" + name + "] failed to append.", e);

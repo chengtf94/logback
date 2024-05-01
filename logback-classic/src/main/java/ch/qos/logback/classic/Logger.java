@@ -67,24 +67,7 @@ public final class Logger implements org.slf4j.Logger, LocationAwareLogger, Appe
     transient private List<Logger> childrenList;
 
     /**
-     * It is assumed that once the 'aai' variable is set to a non-null value, it
-     * will never be reset to null. it is further assumed that only place where
-     * the 'aai'ariable is set is within the addAppender method. This method is
-     * synchronized on 'this' (Logger) protecting against simultaneous
-     * re-configuration of this logger (a very unlikely scenario).
-     * 
-     * <p>
-     * It is further assumed that the AppenderAttachableImpl is responsible for
-     * its internal synchronization and thread safety. Thus, we can get away with
-     * *not* synchronizing on the 'aai' (check null/ read) because
-     * <p>
-     * 1) the 'aai' variable is immutable once set to non-null
-     * <p>
-     * 2) 'aai' is getAndSet only within addAppender which is synchronized
-     * <p>
-     * 3) all the other methods check whether 'aai' is null
-     * <p>
-     * 4) AppenderAttachableImpl is thread safe
+     *
      */
     transient private AppenderAttachableImpl<ILoggingEvent> aai;
     /**
@@ -245,33 +228,8 @@ public final class Logger implements org.slf4j.Logger, LocationAwareLogger, Appe
         return aai.getAppender(name);
     }
 
-    /**
-     * Invoke all the appenders of this logger.
-     * 
-     * @param event
-     *          The event to log
-     */
-    public void callAppenders(ILoggingEvent event) {
-        int writes = 0;
-        for (Logger l = this; l != null; l = l.parent) {
-            writes += l.appendLoopOnAppenders(event);
-            if (!l.additive) {
-                break;
-            }
-        }
-        // No appenders in hierarchy
-        if (writes == 0) {
-            loggerContext.noAppenderDefinedWarning(this);
-        }
-    }
 
-    private int appendLoopOnAppenders(ILoggingEvent event) {
-        if (aai != null) {
-            return aai.appendLoopOnAppenders(event);
-        } else {
-            return 0;
-        }
-    }
+
 
     /**
      * Remove the appender passed as parameter form the list of appenders.
@@ -361,27 +319,7 @@ public final class Logger implements org.slf4j.Logger, LocationAwareLogger, Appe
         return childLogger;
     }
 
-    /**
-     * The next methods are not merged into one because of the time we gain by not
-     * creating a new Object[] with the params. This reduces the cost of not
-     * logging by about 20 nanoseconds.
-     */
 
-    private void filterAndLog_0_Or3Plus(final String localFQCN, final Marker marker, final Level level, final String msg, final Object[] params,
-                    final Throwable t) {
-
-        final FilterReply decision = loggerContext.getTurboFilterChainDecision_0_3OrMore(marker, this, level, msg, params, t);
-
-        if (decision == FilterReply.NEUTRAL) {
-            if (effectiveLevelInt > level.levelInt) {
-                return;
-            }
-        } else if (decision == FilterReply.DENY) {
-            return;
-        }
-
-        buildLoggingEventAndAppend(localFQCN, marker, level, msg, params, t);
-    }
 
     private void filterAndLog_1(final String localFQCN, final Marker marker, final Level level, final String msg, final Object param, final Throwable t) {
 
@@ -414,12 +352,6 @@ public final class Logger implements org.slf4j.Logger, LocationAwareLogger, Appe
         buildLoggingEventAndAppend(localFQCN, marker, level, msg, new Object[] { param1, param2 }, t);
     }
 
-    private void buildLoggingEventAndAppend(final String localFQCN, final Marker marker, final Level level, final String msg, final Object[] params,
-                    final Throwable t) {
-        LoggingEvent le = new LoggingEvent(localFQCN, this, level, msg, t, params);
-        le.setMarker(marker);
-        callAppenders(le);
-    }
 
     public void trace(String msg) {
         filterAndLog_0_Or3Plus(FQCN, null, Level.TRACE, msg, null, null);
@@ -587,8 +519,48 @@ public final class Logger implements org.slf4j.Logger, LocationAwareLogger, Appe
         filterAndLog_2(FQCN, null, Level.INFO, format, arg1, arg2, null);
     }
 
+    @Override
     public void info(String format, Object... argArray) {
         filterAndLog_0_Or3Plus(FQCN, null, Level.INFO, format, argArray, null);
+    }
+    private void filterAndLog_0_Or3Plus(
+            final String localFQCN, final Marker marker, final Level level,
+            final String msg, final Object[] params, final Throwable t) {
+        final FilterReply decision = loggerContext.getTurboFilterChainDecision_0_3OrMore(marker, this, level, msg, params, t);
+        if (decision == FilterReply.NEUTRAL) {
+            if (effectiveLevelInt > level.levelInt) {
+                return;
+            }
+        } else if (decision == FilterReply.DENY) {
+            return;
+        }
+        buildLoggingEventAndAppend(localFQCN, marker, level, msg, params, t);
+    }
+    private void buildLoggingEventAndAppend(
+            final String localFQCN, final Marker marker, final Level level,
+            final String msg, final Object[] params, final Throwable t) {
+        LoggingEvent le = new LoggingEvent(localFQCN, this, level, msg, t, params);
+        le.setMarker(marker);
+        callAppenders(le);
+    }
+    public void callAppenders(ILoggingEvent event) {
+        int writes = 0;
+        for (Logger l = this; l != null; l = l.parent) {
+            writes += l.appendLoopOnAppenders(event);
+            if (!l.additive) {
+                break;
+            }
+        }
+        if (writes == 0) {
+            loggerContext.noAppenderDefinedWarning(this);
+        }
+    }
+    private int appendLoopOnAppenders(ILoggingEvent event) {
+        if (aai != null) {
+            return aai.appendLoopOnAppenders(event);
+        } else {
+            return 0;
+        }
     }
 
     public void info(String msg, Throwable t) {
