@@ -1,16 +1,3 @@
-/**
- * Logback: the reliable, generic, fast and flexible logging framework.
- * Copyright (C) 1999-2015, QOS.ch. All rights reserved.
- *
- * This program and the accompanying materials are dual-licensed under
- * either the terms of the Eclipse Public License v1.0 as published by
- * the Eclipse Foundation
- *
- *   or (per the licensee's choosing)
- *
- * under the terms of the GNU Lesser General Public License version 2.1
- * as published by the Free Software Foundation.
- */
 package ch.qos.logback.classic;
 
 import java.io.ObjectStreamException;
@@ -65,7 +52,7 @@ public final class Logger
     transient private Logger parent;
 
     /**
-     * The children of this logger. A logger may have zero or more children.
+     * 子Logger列表
      */
     transient private List<Logger> childrenList;
 
@@ -129,6 +116,9 @@ public final class Logger
         return parent == null;
     }
 
+    /**
+     * 获取子Logger
+     */
     Logger getChildByName(final String childName) {
         if (childrenList == null) {
             return null;
@@ -137,7 +127,6 @@ public final class Logger
             for (int i = 0; i < len; i++) {
                 final Logger childLogger_i = (Logger) childrenList.get(i);
                 final String childName_i = childLogger_i.getName();
-
                 if (childName.equals(childName_i)) {
                     return childLogger_i;
                 }
@@ -342,17 +331,14 @@ public final class Logger
     }
 
     /**
-     * The default size of child list arrays. The JDK 1.5 default is 10. We use a
-     * smaller value to save a little space.
+     * 创建子Logger
      */
-
     Logger createChildByName(final String childName) {
         int i_index = LoggerNameUtil.getSeparatorIndexOf(childName, this.name.length() + 1);
         if (i_index != -1) {
             throw new IllegalArgumentException("For logger [" + this.name + "] child name [" + childName
                     + " passed as parameter, may not include '.' after index" + (this.name.length() + 1));
         }
-
         if (childrenList == null) {
             childrenList = new CopyOnWriteArrayList<Logger>();
         }
@@ -369,12 +355,11 @@ public final class Logger
      * by about 20 nanoseconds.
      */
 
-    private void filterAndLog_0_Or3Plus(final String localFQCN, final Marker marker, final Level level,
+    private void filterAndLog_0_Or3Plus(
+            final String localFQCN, final Marker marker, final Level level,
             final String msg, final Object[] params, final Throwable t) {
-
-        final FilterReply decision = loggerContext.getTurboFilterChainDecision_0_3OrMore(marker, this, level, msg,
-                params, t);
-
+        final FilterReply decision = loggerContext
+                .getTurboFilterChainDecision_0_3OrMore(marker, this, level, msg, params, t);
         if (decision == FilterReply.NEUTRAL) {
             if (effectiveLevelInt > level.levelInt) {
                 return;
@@ -382,7 +367,6 @@ public final class Logger
         } else if (decision == FilterReply.DENY) {
             return;
         }
-
         buildLoggingEventAndAppend(localFQCN, marker, level, msg, params, t);
     }
 
@@ -483,6 +467,7 @@ public final class Logger
         }
     }
 
+    @Override
     public void debug(String msg) {
         filterAndLog_0_Or3Plus(FQCN, null, Level.DEBUG, msg, null, null);
     }

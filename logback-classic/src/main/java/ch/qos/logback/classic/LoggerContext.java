@@ -1,16 +1,3 @@
-/**
- * Logback: the reliable, generic, fast and flexible logging framework.
- * Copyright (C) 1999-2015, QOS.ch. All rights reserved.
- *
- * This program and the accompanying materials are dual-licensed under
- * either the terms of the Eclipse Public License v1.0 as published by
- * the Eclipse Foundation
- *
- *   or (per the licensee's choosing)
- *
- * under the terms of the GNU Lesser General Public License version 2.1
- * as published by the Free Software Foundation.
- */
 package ch.qos.logback.classic;
 
 import static ch.qos.logback.core.CoreConstants.EVALUATOR_MAP;
@@ -47,11 +34,7 @@ import ch.qos.logback.core.status.WarnStatus;
 import org.slf4j.spi.MDCAdapter;
 
 /**
- * LoggerContext glues many of the logback-classic components together. In
- * principle, every logback-classic component instance is attached either
- * directly or indirectly to a LoggerContext instance. Just as importantly
- * LoggerContext implements the {@link ILoggerFactory} acting as the
- * manufacturing source of {@link Logger} instances.
+ * 日志上下文
  *
  * @author Ceki Gulcu
  */
@@ -59,31 +42,24 @@ public class LoggerContext extends ContextBase implements ILoggerFactory, LifeCy
 
     /** Default setting of packaging data in stack traces */
     public static final boolean DEFAULT_PACKAGING_DATA = false;
-
     final Logger root;
     private int size;
     private int noAppenderWarning = 0;
     final private List<LoggerContextListener> loggerContextListenerList = new ArrayList<LoggerContextListener>();
-
     private Map<String, Logger> loggerCache;
 
     private LoggerContextVO loggerContextRemoteView;
     private final TurboFilterList turboFilterList = new TurboFilterList();
     private boolean packagingDataEnabled = DEFAULT_PACKAGING_DATA;
     SequenceNumberGenerator sequenceNumberGenerator = null; // by default there is no SequenceNumberGenerator
-
     MDCAdapter mdcAdapter;
-
-
     private int maxCallerDataDepth = ClassicConstants.DEFAULT_MAX_CALLEDER_DATA_DEPTH;
-
     int resetCount = 0;
     private List<String> frameworkPackages;
 
     public LoggerContext() {
         super();
         this.loggerCache = new ConcurrentHashMap<String, Logger>();
-
         this.loggerContextRemoteView = new LoggerContextVO(this);
         this.root = new Logger(Logger.ROOT_LOGGER_NAME, null, this);
         this.root.setLevel(Level.DEBUG);
@@ -92,15 +68,15 @@ public class LoggerContext extends ContextBase implements ILoggerFactory, LifeCy
         size = 1;
         this.frameworkPackages = new ArrayList<String>();
     }
-
     void initEvaluatorMap() {
         putObject(EVALUATOR_MAP, new HashMap<String, EventEvaluator<?>>());
     }
 
-    /**
-     * A new instance of LoggerContextRemoteView needs to be created each time the
-     * name or propertyMap (including keys or values) changes.
-     */
+    @Override
+    public void setName(String name) {
+        super.setName(name);
+        updateLoggerContextVO();
+    }
     private void updateLoggerContextVO() {
         loggerContextRemoteView = new LoggerContextVO(this);
     }
@@ -111,42 +87,33 @@ public class LoggerContext extends ContextBase implements ILoggerFactory, LifeCy
         updateLoggerContextVO();
     }
 
+
     @Override
-    public void setName(String name) {
-        super.setName(name);
-        updateLoggerContextVO();
+    public void start() {
+        super.start();
+        fireOnStart();
     }
 
-
-
+    /**
+     * 获取Logger
+     */
     public final Logger getLogger(final Class<?> clazz) {
         return getLogger(clazz.getName());
     }
-
     @Override
     public Logger getLogger(final String name) {
-
         if (name == null) {
             throw new IllegalArgumentException("name argument cannot be null");
         }
-
-        // if we are asking for the root logger, then let us return it without
-        // wasting time
         if (Logger.ROOT_LOGGER_NAME.equalsIgnoreCase(name)) {
             return root;
         }
-
         int i = 0;
         Logger logger = root;
-
-        // check if the desired logger exists, if it does, return it
-        // without further ado.
         Logger childLogger = (Logger) loggerCache.get(name);
-        // if we have the child, then let us return it without wasting time
         if (childLogger != null) {
             return childLogger;
         }
-
         // if the desired logger does not exist, them create all the loggers
         // in between as well (if they don't already exist)
         String childName;
@@ -182,12 +149,6 @@ public class LoggerContext extends ContextBase implements ILoggerFactory, LifeCy
         return size;
     }
 
-    /**
-     * Check if the named logger exists in the hierarchy. If so return its
-     * reference, otherwise returns <code>null</code>.
-     *
-     * @param name the name of the logger to search for.
-     */
     public Logger exists(String name) {
         return (Logger) loggerCache.get(name);
     }
@@ -279,6 +240,35 @@ public class LoggerContext extends ContextBase implements ILoggerFactory, LifeCy
                 new Object[] { param1, param2 }, t);
     }
 
+    @Override
+    public void stop() {
+        reset();
+        fireOnStop();
+        resetAllListeners();
+        super.stop();
+    }
+
+    @Override
+    public void reset() {
+        resetCount++;
+        super.reset();
+        initEvaluatorMap();
+        initCollisionMaps();
+        root.recursiveReset();
+        resetTurboFilterList();
+        cancelScheduledTasks();
+        fireOnReset();
+        resetListenersExceptResetResistant();
+        resetStatusListenersExceptResetResistant();
+    }
+
+    private void fireOnReset() {
+        for (LoggerContextListener listener : loggerContextListenerList) {
+            listener.onReset(this);
+        }
+    }
+
+
     // === start listeners ==============================================
     public void addListener(LoggerContextListener listener) {
         loggerContextListenerList.add(listener);
@@ -313,12 +303,6 @@ public class LoggerContext extends ContextBase implements ILoggerFactory, LifeCy
         }
     }
 
-    private void fireOnReset() {
-        for (LoggerContextListener listener : loggerContextListenerList) {
-            listener.onReset(this);
-        }
-    }
-
     private void fireOnStart() {
         for (LoggerContextListener listener : loggerContextListenerList) {
             listener.onStart(this);
@@ -334,41 +318,6 @@ public class LoggerContext extends ContextBase implements ILoggerFactory, LifeCy
     // === end listeners ==============================================
 
     @Override
-    public void start() {
-        super.start();
-        fireOnStart();
-    }
-
-    public void stop() {
-        reset();
-        fireOnStop();
-        resetAllListeners();
-        super.stop();
-    }
-
-    /**
-     * This method clears all internal properties, except internal status messages,
-     * closes all appenders, removes any turboFilters, fires an OnReset event,
-     * removes all status listeners, removes all context listeners (except those
-     * which are reset resistant).
-     * <p/>
-     * As mentioned above, internal status messages survive resets.
-     */
-    @Override
-    public void reset() {
-        resetCount++;
-        super.reset();
-        initEvaluatorMap();
-        initCollisionMaps();
-        root.recursiveReset();
-        resetTurboFilterList();
-        cancelScheduledTasks();
-        fireOnReset();
-        resetListenersExceptResetResistant();
-        resetStatusListenersExceptResetResistant();
-    }
-
-    @Override
     public String toString() {
         return this.getClass().getName() + "[" + getName() + "]";
     }
@@ -381,20 +330,9 @@ public class LoggerContext extends ContextBase implements ILoggerFactory, LifeCy
         this.maxCallerDataDepth = maxCallerDataDepth;
     }
 
-    /**
-     * List of packages considered part of the logging framework such that they are
-     * never considered as callers of the logging framework. This list used to
-     * compute the caller for logging events.
-     * <p/>
-     * To designate package "com.foo" as well as all its subpackages as being part
-     * of the logging framework, simply add "com.foo" to this list.
-     *
-     * @return list of framework packages
-     */
     public List<String> getFrameworkPackages() {
         return frameworkPackages;
     }
-
 
     @Override
     public void setSequenceNumberGenerator(SequenceNumberGenerator sng) {
@@ -418,4 +356,5 @@ public class LoggerContext extends ContextBase implements ILoggerFactory, LifeCy
             sm.add(new ErrorStatus("mdcAdapter cannot be set multiple times", this, new IllegalStateException("mdcAdapter already set")));
         }
     }
+
 }

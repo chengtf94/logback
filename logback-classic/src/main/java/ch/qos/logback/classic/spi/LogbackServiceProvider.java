@@ -29,11 +29,10 @@ public class LogbackServiceProvider implements SLF4JServiceProvider {
     private LoggerContext defaultLoggerContext;
     private IMarkerFactory markerFactory;
     private LogbackMDCAdapter mdcAdapter;
-    // private final ContextSelectorStaticBinder contextSelectorBinder =
-    // ContextSelectorStaticBinder.getSingleton();
-//    private static Object KEY = new Object();
-//    private volatile boolean initialized = false;
 
+    /**
+     * 初始化
+     */
     @Override
     public void initialize() {
         defaultLoggerContext = new LoggerContext();
@@ -45,7 +44,6 @@ public class LogbackServiceProvider implements SLF4JServiceProvider {
         // set the MDCAdapter for the defaultLoggerContext immediately
         defaultLoggerContext.setMDCAdapter(mdcAdapter);
     }
-
     private void initializeLoggerContext() {
         try {
             try {
@@ -53,30 +51,17 @@ public class LogbackServiceProvider implements SLF4JServiceProvider {
             } catch (JoranException je) {
                 Util.report("Failed to auto configure default logger context", je);
             }
-            // LOGBACK-292
             if (!StatusUtil.contextHasStatusListener(defaultLoggerContext)) {
                 StatusPrinter.printInCaseOfErrorsOrWarnings(defaultLoggerContext);
             }
-            // contextSelectorBinder.init(defaultLoggerContext, KEY);
-
         } catch (Exception t) { // see LOGBACK-1159
             Util.report("Failed to instantiate [" + LoggerContext.class.getName() + "]", t);
         }
     }
 
     @Override
-
     public ILoggerFactory getLoggerFactory() {
         return defaultLoggerContext;
-
-//        if (!initialized) {
-//            return defaultLoggerContext;
-//        
-//
-//        if (contextSelectorBinder.getContextSelector() == null) {
-//            throw new IllegalStateException("contextSelector cannot be null. See also " + NULL_CS_URL);
-//        }
-//        return contextSelectorBinder.getContextSelector().getLoggerContext();
     }
 
     @Override
